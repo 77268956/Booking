@@ -282,21 +282,24 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     for (final destino in _destinos)
                       ActionChip(
-                        avatar: const Icon(Icons.location_on, size: 16, color: Colors.white),
+                        avatar: Icon(Icons.location_on, size: 16, color: _query == destino ? Colors.black : Colors.white),
                         label: Text(
                           destino,
-                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 13,
+                          ),
                         ),
                         backgroundColor: _query == destino
                             ? const Color(0xFFFEBB02)
-                            : Colors.white.withValues(alpha: 0.15),
+                            : Colors.white,
                         side: BorderSide(
                           color: _query == destino
                               ? const Color(0xFFFEBB02)
-                              : Colors.white.withValues(alpha: 0.4),
+                              : const Color(0xFFE0E0E0),
                         ),
-                        labelStyle: TextStyle(
-                          color: _query == destino ? const Color(0xFF003B95) : Colors.white,
+                        labelStyle: const TextStyle(
+                          color: Colors.black,
                           fontWeight: FontWeight.w600,
                         ),
                         shape: RoundedRectangleBorder(
@@ -309,13 +312,13 @@ class _HomePageState extends State<HomePage> {
                       ),
                     if (_query.isNotEmpty)
                       ActionChip(
-                        avatar: const Icon(Icons.close, size: 16, color: Colors.white),
+                        avatar: const Icon(Icons.close, size: 16, color: Colors.black),
                         label: const Text(
                           'Limpiar búsqueda',
-                          style: TextStyle(color: Colors.white, fontSize: 13),
+                          style: TextStyle(color: Colors.black, fontSize: 13),
                         ),
-                        backgroundColor: Colors.transparent,
-                        side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                        backgroundColor: Colors.white,
+                        side: const BorderSide(color: Color(0xFFE0E0E0)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),

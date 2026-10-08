@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
+
 import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart' as movil;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../model/hotel.dart';
@@ -15,15 +18,22 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-    final path = join(await getDatabasesPath(), 'booking_clone.db');
-    _database = await openDatabase(
+    final DatabaseFactory factory;
+    if (Platform.isAndroid || Platform.isIOS) {
+      factory = movil.databaseFactorySqflitePlugin;
+    } else {
+      sqfliteFfiInit();
+      factory = databaseFactoryFfi;
+    }
+    final path = join(await factory.getDatabasesPath(), 'booking_clone.db');
+    _database = await factory.openDatabase(
       path,
-      version: 6,
-      onCreate: _createDatabase,
-      onUpgrade: _upgradeDatabase,
-      onOpen: _ensureDatabase,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onCreate: _createDatabase,
+        onUpgrade: _upgradeDatabase,
+        onOpen: _ensureDatabase,
+      ),
     );
     return _database!;
   }
