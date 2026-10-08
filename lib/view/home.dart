@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../database/database_helper.dart';
 import '../model/hotel.dart';
 import '../model/user.dart';
 import 'hotel_detail.dart';
+import 'mis_reservas.dart';
+import 'perfil_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.user});
@@ -17,25 +21,64 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _searchController = TextEditingController();
   late Future<List<Hotel>> _hotelsFuture;
+  late User _user;
+  Timer? _debounce;
+  String _query = '';
+
+  static const List<String> _destinos = ['Cancún', 'Madrid', 'Nueva York'];
 
   @override
   void initState() {
     super.initState();
+    _user = widget.user;
     _hotelsFuture = DatabaseHelper.instance.getHotels();
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _searchHotels() {
-    setState(
-      () => _hotelsFuture = DatabaseHelper.instance.getHotels(
-        search: _searchController.text,
-      ),
+  void _buscar(String texto) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() {
+        _query = texto.trim();
+        _hotelsFuture = DatabaseHelper.instance.getHotels(search: _query);
+      });
+    });
+  }
+
+  void _alEscribir(String texto) {
+    setState(() {});
+    _buscar(texto);
+  }
+
+  void _buscarInmediato(String texto) {
+    _debounce?.cancel();
+    setState(() {
+      _query = texto.trim();
+      _hotelsFuture = DatabaseHelper.instance.getHotels(search: _query);
+    });
+  }
+
+  void _limpiarBusqueda() {
+    _debounce?.cancel();
+    _searchController.clear();
+    _buscarInmediato('');
+  }
+
+  Future<void> _abrirPerfil() async {
+    final actualizado = await Navigator.push<User>(
+      context,
+      MaterialPageRoute<User>(builder: (_) => PerfilPage(user: _user)),
     );
+    if (actualizado != null && mounted) {
+      setState(() => _user = actualizado);
+    }
   }
 
   @override
@@ -79,18 +122,51 @@ class _HomePageState extends State<HomePage> {
                     const Text('EUR', style: TextStyle(color: Colors.white)),
                     const SizedBox(width: 20),
                   ],
-                  const Icon(
-                    Icons.account_circle_outlined,
-                    color: Colors.white,
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => MisReservasPage(user: _user),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Mis Reservas',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      widget.user.nombre,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                  const SizedBox(width: 10),
+                  InkWell(
+                    onTap: _abrirPerfil,
+                    borderRadius: BorderRadius.circular(30),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.account_circle_outlined,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              _user.nombre,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -115,7 +191,7 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hola, ${widget.user.nombre}',
+                  'Hola, ${_user.nombre}',
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
                 const SizedBox(height: 7),
@@ -146,11 +222,20 @@ class _HomePageState extends State<HomePage> {
                         ),
                         child: TextField(
                           controller: _searchController,
-                          onSubmitted: (_) => _searchHotels(),
-                          decoration: const InputDecoration(
+                          onChanged: _alEscribir,
+                          onSubmitted: _buscarInmediato,
+                          textInputAction: TextInputAction.search,
+                          decoration: InputDecoration(
                             border: InputBorder.none,
-                            icon: Icon(Icons.search),
+                            icon: const Icon(Icons.search),
                             hintText: 'Ciudad, hotel o destino',
+                            suffixIcon: _searchController.text.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Limpiar',
+                                    icon: const Icon(Icons.close),
+                                    onPressed: _limpiarBusqueda,
+                                  ),
                           ),
                         ),
                       );
@@ -158,7 +243,7 @@ class _HomePageState extends State<HomePage> {
                         height: 56,
                         width: compact ? double.infinity : 120,
                         child: ElevatedButton(
-                          onPressed: _searchHotels,
+                          onPressed: () => _buscarInmediato(_searchController.text),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0071C2),
                             foregroundColor: Colors.white,
@@ -190,6 +275,54 @@ class _HomePageState extends State<HomePage> {
                     },
                   ),
                 ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final destino in _destinos)
+                      ActionChip(
+                        avatar: const Icon(Icons.location_on, size: 16, color: Colors.white),
+                        label: Text(
+                          destino,
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        backgroundColor: _query == destino
+                            ? const Color(0xFFFEBB02)
+                            : Colors.white.withValues(alpha: 0.15),
+                        side: BorderSide(
+                          color: _query == destino
+                              ? const Color(0xFFFEBB02)
+                              : Colors.white.withValues(alpha: 0.4),
+                        ),
+                        labelStyle: TextStyle(
+                          color: _query == destino ? const Color(0xFF003B95) : Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        onPressed: () {
+                          _searchController.text = destino;
+                          _buscarInmediato(destino);
+                        },
+                      ),
+                    if (_query.isNotEmpty)
+                      ActionChip(
+                        avatar: const Icon(Icons.close, size: 16, color: Colors.white),
+                        label: const Text(
+                          'Limpiar búsqueda',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        backgroundColor: Colors.transparent,
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        onPressed: _limpiarBusqueda,
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -207,18 +340,34 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Hoteles recomendados',
-                style: TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF262626),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _query.isEmpty
+                          ? 'Hoteles recomendados'
+                          : 'Resultados para "$_query"',
+                      style: const TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF262626),
+                      ),
+                    ),
+                  ),
+                  if (_query.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: _limpiarBusqueda,
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Limpiar búsqueda'),
+                    ),
+                ],
               ),
               const SizedBox(height: 6),
-              const Text(
-                'Elige tu próxima estancia y consulta todos sus detalles.',
-                style: TextStyle(color: Color(0xFF595959)),
+              Text(
+                _query.isEmpty
+                    ? 'Elige tu próxima estancia y consulta todos sus detalles.'
+                    : 'Buscando por ciudad, hotel, descripción o servicios.',
+                style: const TextStyle(color: Color(0xFF595959)),
               ),
               const SizedBox(height: 18),
               FutureBuilder<List<Hotel>>(
@@ -237,32 +386,70 @@ class _HomePageState extends State<HomePage> {
                   }
                   final hotels = snapshot.data ?? [];
                   if (hotels.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(30),
-                      child: Text('No encontramos hoteles para esa búsqueda.'),
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 30),
+                      child: Column(
+                        children: [
+                          Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
+                          const SizedBox(height: 12),
+                          Text(
+                            _query.isEmpty
+                                ? 'No hay hoteles disponibles.'
+                                : 'No encontramos hoteles para "$_query".',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 16, color: Color(0xFF595959)),
+                          ),
+                          const SizedBox(height: 14),
+                          FilledButton.icon(
+                            onPressed: _limpiarBusqueda,
+                            icon: const Icon(Icons.close),
+                            label: const Text('Limpiar búsqueda'),
+                            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0071C2)),
+                          ),
+                        ],
+                      ),
                     );
                   }
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final columns = constraints.maxWidth > 820
-                          ? 3
-                          : constraints.maxWidth > 540
-                          ? 2
-                          : 1;
-                      return GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: hotels.length,
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: columns == 1 ? 1.55 : .82,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_query.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            '${hotels.length} ${hotels.length == 1 ? 'hotel encontrado' : 'hoteles encontrados'}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0071C2),
+                            ),
+                          ),
                         ),
-                        itemBuilder: (context, index) =>
-                            _HotelCard(hotel: hotels[index]),
-                      );
-                    },
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth > 820
+                              ? 3
+                              : constraints.maxWidth > 540
+                              ? 2
+                              : 1;
+                          return GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: hotels.length,
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: columns,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: columns == 1 ? 1.55 : .82,
+                            ),
+                            itemBuilder: (context, index) => _HotelCard(
+                              hotel: hotels[index],
+                              user: _user,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   );
                 },
               ),
@@ -275,9 +462,10 @@ class _HomePageState extends State<HomePage> {
 }
 
 class _HotelCard extends StatelessWidget {
-  const _HotelCard({required this.hotel});
+  const _HotelCard({required this.hotel, required this.user});
 
   final Hotel hotel;
+  final User user;
 
   @override
   Widget build(BuildContext context) {
@@ -400,7 +588,10 @@ class _HotelCard extends StatelessWidget {
                       onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
-                          builder: (_) => HotelDetail(hotel: hotel),
+                          builder: (_) => HotelDetail(
+                            hotel: hotel,
+                            user: user,
+                          ),
                         ),
                       ),
                       child: const Text('Ver hotel'),

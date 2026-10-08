@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import '../model/hotel.dart';
+import '../model/reserva.dart';
 import '../model/user.dart';
 import 'hotel_data.dart';
+import 'hotel_search.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DatabaseHelper {
@@ -11,17 +13,10 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._();
 
   static const _usersKey = 'booking_clone_users';
+  static const _reservationsKey = 'booking_clone_reservations';
 
   Future<List<Hotel>> getHotels({String search = ''}) async {
-    final value = search.trim().toLowerCase();
-    if (value.isEmpty) return initialHotels;
-    return initialHotels
-        .where(
-          (hotel) => '${hotel.nombre} ${hotel.ubicacion}'
-              .toLowerCase()
-              .contains(value),
-        )
-        .toList();
+    return filtrarHoteles(initialHotels, search);
   }
 
   Future<List<User>> _getUsers() async {
@@ -69,11 +64,64 @@ class DatabaseHelper {
     )) {
       return false;
     }
-    users.add(User.fromMap(user.toMap()));
+    final newId = users.isEmpty ? 1 : (users.last.id ?? 0) + 1;
+    users.add(User.fromMap({...user.toMap(), 'id': newId}));
     await preferences.setStringList(
       _usersKey,
       users.map((savedUser) => jsonEncode(savedUser.toMap())).toList(),
     );
     return true;
+  }
+
+  Future<bool> updateUser(User user) async {
+    if (user.id == null) return false;
+    final preferences = await SharedPreferences.getInstance();
+    final users = await _getUsers();
+    if (users.any(
+      (savedUser) =>
+          savedUser.id != user.id &&
+          savedUser.email == user.email.trim().toLowerCase(),
+    )) {
+      return false;
+    }
+    final indice = users.indexWhere((savedUser) => savedUser.id == user.id);
+    if (indice == -1) return false;
+    users[indice] = user;
+    await preferences.setStringList(
+      _usersKey,
+      users.map((savedUser) => jsonEncode(savedUser.toMap())).toList(),
+    );
+    return true;
+  }
+
+  Future<int> addReservation(Reserva reservation) async {
+    final preferences = await SharedPreferences.getInstance();
+    final reservations = await _getReservations(preferences);
+    final newId = reservations.isEmpty
+        ? 1
+        : (reservations.last.id ?? 0) + 1;
+    reservations.add(Reserva.fromMap({...reservation.toMap(), 'id': newId}));
+    await preferences.setStringList(
+      _reservationsKey,
+      reservations.map((item) => jsonEncode(item.toMap())).toList(),
+    );
+    return newId;
+  }
+
+  Future<List<Reserva>> _getReservations(
+    SharedPreferences preferences,
+  ) async {
+    final saved = preferences.getStringList(_reservationsKey) ?? [];
+    return saved.map((item) {
+      return Reserva.fromMap(
+        Map<String, Object?>.from(jsonDecode(item) as Map),
+      );
+    }).toList();
+  }
+
+  Future<List<Reserva>> getReservationsForUser(int userId) async {
+    final preferences = await SharedPreferences.getInstance();
+    final reservations = await _getReservations(preferences);
+    return reservations.where((item) => item.usuarioId == userId).toList();
   }
 }
